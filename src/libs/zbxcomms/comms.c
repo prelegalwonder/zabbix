@@ -20,6 +20,8 @@
 #include "common.h"
 #include "comms.h"
 #include "log.h"
+#include "proton/message.h"
+#include "proton/messenger.h"
 
 #if defined(HAVE_IPV6)
 #	define ZBX_SOCKADDR struct sockaddr_storage
@@ -397,6 +399,47 @@ int	zbx_tcp_connect(zbx_sock_t *s, const char *source_ip, const char *ip, unsign
 	return SUCCEED;
 }
 #endif	/* HAVE_IPV6 */
+
+/******************************************************************************
+ *                                                                            *
+ * Function: zbx_amqp_send                                                    *
+ *                                                                            *
+ * Purpose: send zbx payload to amqp broker                                   *
+ *                                                                            *
+ * Return value: SUCCEED - success                                            *
+ *               FAIL - an error occurred                                     *
+ *                                                                            *
+ * Author: Andrew Replogle                                                    *
+ *                                                                            *
+ ******************************************************************************/
+int zbx_amqp_send(const char *data, const char *priority, const char *dest, const char *ip, unsigned short port, int timeout)
+{
+  opterr = 0;
+  char * address = "amqp://'%s':'%s'/'%s'", ip, port, dest;
+
+  pn_message_t * message;
+  pn_messenger_t * messenger;
+
+  message = pn_message();
+  messenger = pn_messenger(NULL);
+
+  pn_messenger_start(messenger);
+  pn_messenger_set_timeout(messenger, timeout);
+
+  pn_message_set_address(message, address);
+  pn_message_set_priority(message, priority);
+
+  pn_data_t *body = pn_message_body(message);
+  pn_data_put_string(body, pn_bytes(strlen(data), data));
+
+  pn_messenger_put(messenger, message);
+  check(messenger);
+  pn_messenger_send(messenger);
+  check(messenger);
+
+  pn_messenger_stop(messenger);
+  pn_messenger_free(messenger);
+}
 
 /******************************************************************************
  *                                                                            *
